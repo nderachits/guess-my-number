@@ -90,8 +90,11 @@ describe('Game Selection', () => {
       game.processVoiceInput('I\'ll guess yours');
       
       expect(game.gameMode).toBe('reverse');
-      expect(game.gameState).toBe('reverse-setup');
-      expect(mockSpeak).toHaveBeenCalledWith(expect.stringContaining('Think of a number'));
+      expect(game.gameState).toBe('reverse-playing');
+      expect(mockSpeak).toHaveBeenCalledWith(
+        expect.stringContaining('Think of a number between'),
+        expect.any(Function)
+      );
       
       game.speak = originalSpeak;
     });
@@ -123,8 +126,13 @@ describe('Game Selection', () => {
     });
 
     test('should set gameMode when starting reverse game', () => {
+      const originalSpeak = game.speak;
+      game.speak = jest.fn(); // Mock speak to avoid errors
+      
       game.startReverseGame();
       expect(game.gameMode).toBe('reverse');
+      
+      game.speak = originalSpeak;
     });
   });
 });

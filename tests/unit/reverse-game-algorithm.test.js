@@ -21,6 +21,10 @@ describe('Reverse Game Binary Search Algorithm', () => {
 
   describe('Binary search guessing strategy', () => {
     test('should start with middle value for range 1-100', () => {
+      // Mock speak to avoid audio during tests
+      const originalSpeak = game.speak;
+      game.speak = jest.fn();
+      
       game.maxNumber = 100;
       game.startReverseGuessing();
       
@@ -28,9 +32,15 @@ describe('Reverse Game Binary Search Algorithm', () => {
       expect(game.lowBound).toBe(1);
       expect(game.highBound).toBe(100);
       expect(game.attempts).toBe(1);
+      
+      game.speak = originalSpeak;
     });
 
     test('should start with middle value for range 1-50', () => {
+      // Mock speak to avoid audio during tests
+      const originalSpeak = game.speak;
+      game.speak = jest.fn();
+      
       game.maxNumber = 50;
       game.startReverseGuessing();
       
@@ -38,9 +48,14 @@ describe('Reverse Game Binary Search Algorithm', () => {
       expect(game.lowBound).toBe(1);
       expect(game.highBound).toBe(50);
       expect(game.attempts).toBe(1);
+      
+      game.speak = originalSpeak;
     });
 
     test('should adjust high bound when guess is too high', () => {
+      const originalSpeak = game.speak;
+      game.speak = jest.fn();
+      
       game.maxNumber = 100;
       game.startReverseGuessing(); // First guess: 50
       
@@ -55,9 +70,13 @@ describe('Reverse Game Binary Search Algorithm', () => {
       expect(mockMakeGuess).toHaveBeenCalled();
       
       game.makeGuess = originalMakeGuess;
+      game.speak = originalSpeak;
     });
 
     test('should adjust low bound when guess is too low', () => {
+      const originalSpeak = game.speak;
+      game.speak = jest.fn();
+      
       game.maxNumber = 100;
       game.startReverseGuessing(); // First guess: 50
       
@@ -72,6 +91,7 @@ describe('Reverse Game Binary Search Algorithm', () => {
       expect(mockMakeGuess).toHaveBeenCalled();
       
       game.makeGuess = originalMakeGuess;
+      game.speak = originalSpeak;
     });
   });
 

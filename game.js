@@ -2,7 +2,7 @@ class VoiceGuessGame {
     constructor() {
         this.targetNumber = null;
         this.attempts = 0;
-        this.gameState = 'waiting'; // waiting, game-selection, setup, playing, won, reverse-setup, reverse-playing
+        this.gameState = 'waiting'; // waiting, game-selection, setup, playing, won, reverse-playing
         this.isListening = false;
         this.continuousMode = false;
         this.listeningTimeout = null;
@@ -317,17 +317,6 @@ class VoiceGuessGame {
             }
         }
         
-        if (this.gameState === 'reverse-setup') {
-            const maxNumber = this.extractNumber(cleanInput);
-            if (maxNumber && maxNumber >= 10 && maxNumber <= 1000) {
-                this.maxNumber = maxNumber;
-                this.startReverseGuessing();
-            } else {
-                this.speak("Please say a number between 10 and 1000, like 50 or 100!");
-                this.updateMessage("Please say a number between 10 and 1000 for the maximum range!");
-            }
-            return;
-        }
         
         if (this.gameState === 'reverse-playing') {
             const feedback = this.parseFeedback(input);
@@ -595,16 +584,27 @@ class VoiceGuessGame {
     
     startReverseGame() {
         this.gameMode = 'reverse';
-        this.gameState = 'reverse-setup';
-        this.updateMessage("Perfect! Think of a number and I'll try to guess it. What's the highest number you might pick?");
-        this.speak("Perfect! Think of a number and I'll try to guess it. What's the highest number you might pick - say a number like 50 or 100?");
+        
+        // Pick a random max number from the predefined list
+        const possibleMaxNumbers = [5, 10, 20, 50, 100, 500, 1000];
+        this.maxNumber = possibleMaxNumbers[Math.floor(Math.random() * possibleMaxNumbers.length)];
+        
+        this.gameState = 'reverse-playing';
+        
+        const message = `Perfect! Think of a number between 1 and ${this.maxNumber}. When you're ready, I'll start guessing!`;
+        this.updateMessage(message);
+        this.speak(message, () => {
+            // Start guessing after the speech is done
+            setTimeout(() => {
+                this.startReverseGuessing();
+            }, 2000);
+        });
     }
     
     startReverseGuessing() {
         this.lowBound = 1;
         this.highBound = this.maxNumber;
         this.attempts = 0;
-        this.gameState = 'reverse-playing';
         this.attemptsCounter.classList.remove('hidden');
         this.newGameBtn.classList.add('hidden');
         
