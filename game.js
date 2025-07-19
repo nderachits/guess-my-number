@@ -463,6 +463,7 @@ class VoiceGuessGame {
         this.micStatus.textContent = 'Error';
     }
 }
+window.VoiceGuessGame = VoiceGuessGame;
 
 document.addEventListener('DOMContentLoaded', () => {
     if ('speechSynthesis' in window) {
