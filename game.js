@@ -2,12 +2,13 @@ class VoiceGuessGame {
     constructor() {
         this.targetNumber = null;
         this.attempts = 0;
-        this.gameState = 'waiting'; // waiting, setup, playing, won
+        this.gameState = 'waiting'; // waiting, game-selection, setup, playing, won, reverse-setup, reverse-playing
         this.isListening = false;
         this.continuousMode = false;
         this.listeningTimeout = null;
         this.maxNumber = 100;
         this.isSpeaking = false;
+        this.gameMode = 'classic'; // 'classic' or 'reverse'
         
         this.initializeElements();
         this.initializeSpeech();
@@ -140,9 +141,8 @@ class VoiceGuessGame {
             this.continuousMode = true;
             this.micButton.classList.add('continuous');
             this.micStatus.textContent = 'Always Listening';
-            this.updateMessage("I'm thinking of a number and you have to guess it! What's the highest number I should pick - say a number like 50 or 100?");
-            this.speak("I'm thinking of a number and you have to guess it! What's the highest number I should pick - say a number like 50 or 100?", () => {
-                this.gameState = 'setup';
+            this.speak("Welcome! Which game would you like to play? Say 'Guess My Number' if you want to guess my number, or say 'I'll Guess Yours' if you want me to guess your number!", () => {
+                this.gameState = 'game-selection';
                 this.startListening();
             });
         }
@@ -281,6 +281,19 @@ class VoiceGuessGame {
             return;
         }
         
+        if (this.gameState === 'game-selection') {
+            const selectedGame = this.parseGameSelection(input);
+            if (selectedGame === 'classic') {
+                this.startClassicGame();
+            } else if (selectedGame === 'reverse') {
+                this.startReverseGame();
+            } else {
+                this.speak("Say 'Guess My Number' if you want to guess my number, or 'I'll Guess Yours' if you want me to guess your number!");
+                this.updateMessage("Say 'Guess My Number' or 'I'll Guess Yours'");
+            }
+            return;
+        }
+        
         if (this.gameState === 'setup') {
             const maxNumber = this.extractNumber(cleanInput);
             if (maxNumber && maxNumber >= 10 && maxNumber <= 1000) {
@@ -304,11 +317,36 @@ class VoiceGuessGame {
             }
         }
         
+        if (this.gameState === 'reverse-setup') {
+            const maxNumber = this.extractNumber(cleanInput);
+            if (maxNumber && maxNumber >= 10 && maxNumber <= 1000) {
+                this.maxNumber = maxNumber;
+                this.startReverseGuessing();
+            } else {
+                this.speak("Please say a number between 10 and 1000, like 50 or 100!");
+                this.updateMessage("Please say a number between 10 and 1000 for the maximum range!");
+            }
+            return;
+        }
+        
+        if (this.gameState === 'reverse-playing') {
+            const feedback = this.parseFeedback(input);
+            if (feedback === 'correct') {
+                this.handleCorrectFeedback();
+            } else if (feedback === 'too_high' || feedback === 'too_low') {
+                this.processPlayerFeedback(feedback);
+            } else {
+                this.speak("Please say 'correct', 'too high', or 'too low' to help me guess your number!");
+                this.updateMessage("Say 'correct', 'too high', or 'too low'");
+            }
+            return;
+        }
+        
         if (this.gameState === 'won') {
             if (cleanInput.includes('yes') || cleanInput.includes('again') || cleanInput.includes('play')) {
-                this.gameState = 'setup';
-                this.speak("Great! What's the highest number I should pick this time?");
-                this.updateMessage("What's the highest number I should pick this time?");
+                this.gameState = 'game-selection';
+                this.speak("Great! Which game would you like to play next? Say 'Guess My Number' if you want to guess my number, or 'I'll Guess Yours' if you want me to guess your number!");
+                this.updateMessage("Which game would you like to play next? Say 'Guess My Number' or 'I'll Guess Yours'!");
             } else if (cleanInput.includes('no') || cleanInput.includes('stop') || cleanInput.includes('quit')) {
                 this.continuousMode = false;
                 this.micButton.classList.remove('continuous');
@@ -321,6 +359,85 @@ class VoiceGuessGame {
         }
     }
     
+    parseFeedback(input) {
+        console.log('Parsing feedback from:', input);
+        
+        const cleanInput = input.replace(/[^\w\s']/g, '').toLowerCase();
+        
+        // Check for "correct" feedback (highest priority)
+        if (cleanInput.includes('correct') ||
+            (cleanInput.includes('yes') && (cleanInput.includes('correct') || cleanInput.includes('right') || cleanInput.includes('got it'))) ||
+            cleanInput.includes('you got it') ||
+            cleanInput.includes('thats right') ||
+            cleanInput.includes('that is right') ||
+            (cleanInput.includes('yes') && cleanInput.split(' ').length <= 2)) { // simple "yes"
+            console.log('Detected correct feedback');
+            return 'correct';
+        }
+        
+        // Check for "too high" feedback
+        if (cleanInput.includes('too high') ||
+            cleanInput.includes('too big') ||
+            (cleanInput.includes('high') && cleanInput.includes('too')) ||
+            (cleanInput.includes('big') && cleanInput.includes('too')) ||
+            cleanInput.includes('go lower') ||
+            cleanInput.includes('lower') && !cleanInput.includes('go higher')) {
+            console.log('Detected too high feedback');
+            return 'too_high';
+        }
+        
+        // Check for "too low" feedback  
+        if (cleanInput.includes('too low') ||
+            cleanInput.includes('too small') ||
+            (cleanInput.includes('low') && cleanInput.includes('too')) ||
+            (cleanInput.includes('small') && cleanInput.includes('too')) ||
+            cleanInput.includes('go higher') ||
+            (cleanInput.includes('higher') && !cleanInput.includes('no'))) {
+            console.log('Detected too low feedback');
+            return 'too_low';
+        }
+        
+        // Check for simple "right" (less specific than "correct")
+        if (cleanInput.includes('right') && !cleanInput.includes('not right')) {
+            console.log('Detected correct feedback (right)');
+            return 'correct';
+        }
+        
+        console.log('No feedback detected');
+        return null;
+    }
+
+    parseGameSelection(input) {
+        console.log('Parsing game selection from:', input);
+        
+        const cleanInput = input.replace(/[^\w\s']/g, '').toLowerCase();
+        
+        // Check for reverse game patterns first (more specific)
+        if (cleanInput.includes('ill guess yours') || 
+            cleanInput.includes('i will guess yours') ||
+            cleanInput.includes('ill guess your') ||
+            cleanInput.includes('i will guess your') ||
+            cleanInput.includes('let me guess') ||
+            cleanInput.includes('you guess mine') ||
+            cleanInput.includes('you guess my') ||
+            cleanInput.includes('you try to guess') ||
+            (cleanInput.includes('you') && cleanInput.includes('guess') && !cleanInput.includes('want you to guess'))) {
+            console.log('Detected reverse game');
+            return 'reverse';
+        }
+        
+        // Check for classic game patterns
+        if (cleanInput.includes('guess my number') || 
+            cleanInput.includes('guess my') ||
+            (cleanInput.includes('guess') && cleanInput.includes('my') && !cleanInput.includes('you guess my'))) {
+            console.log('Detected classic game');
+            return 'classic';
+        }
+        
+        console.log('No game selection detected');
+        return null;
+    }
+
     extractNumber(input) {
         console.log('Extracting number from:', input);
         
@@ -461,6 +578,74 @@ class VoiceGuessGame {
         this.updateMessage(message, 'error-state');
         this.micButton.disabled = true;
         this.micStatus.textContent = 'Error';
+    }
+    
+    startGameSelection() {
+        this.gameState = 'game-selection';
+        this.updateMessage("Which game would you like to play?");
+        this.speak("Which game would you like to play? Say 'Guess My Number' if you want to guess my number, or say 'I'll Guess Yours' if you want me to guess your number!");
+    }
+    
+    startClassicGame() {
+        this.gameMode = 'classic';
+        this.gameState = 'setup';
+        this.updateMessage("Great! What's the highest number I should pick - say a number like 50 or 100?");
+        this.speak("Great! What's the highest number I should pick - say a number like 50 or 100?");
+    }
+    
+    startReverseGame() {
+        this.gameMode = 'reverse';
+        this.gameState = 'reverse-setup';
+        this.updateMessage("Perfect! Think of a number and I'll try to guess it. What's the highest number you might pick?");
+        this.speak("Perfect! Think of a number and I'll try to guess it. What's the highest number you might pick - say a number like 50 or 100?");
+    }
+    
+    startReverseGuessing() {
+        this.lowBound = 1;
+        this.highBound = this.maxNumber;
+        this.attempts = 0;
+        this.gameState = 'reverse-playing';
+        this.attemptsCounter.classList.remove('hidden');
+        this.newGameBtn.classList.add('hidden');
+        
+        this.makeGuess();
+    }
+    
+    makeGuess() {
+        this.currentGuess = Math.floor((this.lowBound + this.highBound) / 2);
+        this.attempts++;
+        this.updateAttempts();
+        
+        const message = `Is your number ${this.currentGuess}? Say 'correct' if I got it, 'too high' if my guess is too high, or 'too low' if my guess is too low.`;
+        this.updateMessage(message);
+        this.speak(message);
+        
+        console.log('App guess:', this.currentGuess, 'Range:', this.lowBound, 'to', this.highBound);
+    }
+    
+    processPlayerFeedback(feedback) {
+        if (feedback === 'too_high') {
+            this.highBound = this.currentGuess - 1;
+        } else if (feedback === 'too_low') {
+            this.lowBound = this.currentGuess + 1;
+        }
+        
+        if (this.lowBound > this.highBound) {
+            this.speak("Wait, I think there might be a mistake. Let's start over!");
+            this.startReverseGuessing();
+            return;
+        }
+        
+        this.makeGuess();
+    }
+    
+    handleCorrectFeedback() {
+        this.gameState = 'won';
+        const message = `Yes! I guessed your number ${this.currentGuess} in ${this.attempts} ${this.attempts === 1 ? 'attempt' : 'attempts'}! Would you like to play again?`;
+        
+        this.updateMessage(message, 'celebration');
+        this.speak(message);
+        this.newGameBtn.classList.remove('hidden');
     }
 }
 window.VoiceGuessGame = VoiceGuessGame;

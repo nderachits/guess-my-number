@@ -182,8 +182,8 @@ describe('Game State Management', () => {
       
       game.processVoiceInput('yes');
       
-      expect(game.gameState).toBe('setup');
-      expect(mockSpeak).toHaveBeenCalledWith(expect.stringContaining('highest number'));
+      expect(game.gameState).toBe('game-selection');
+      expect(mockSpeak).toHaveBeenCalledWith(expect.stringContaining('Which game would you like to play next'));
       
       game.speak = originalSpeak;
     });
