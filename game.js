@@ -2,16 +2,17 @@ class VoiceGuessGame {
     constructor() {
         this.targetNumber = null;
         this.attempts = 0;
-        this.gameState = 'waiting'; // waiting, playing, won
+        this.gameState = 'waiting'; // waiting, setup, playing, won
         this.isListening = false;
         this.continuousMode = false;
         this.listeningTimeout = null;
+        this.maxNumber = 100;
         
         this.initializeElements();
         this.initializeSpeech();
         this.setupEventListeners();
         
-        this.speak("Welcome to Guess My Number! Click the microphone once to enable continuous listening, then say 'start' to begin playing!");
+        this.speak("Welcome to Guess My Number! Click the microphone to start playing and choose your number range!");
     }
     
     initializeElements() {
@@ -81,8 +82,9 @@ class VoiceGuessGame {
             this.continuousMode = true;
             this.micButton.classList.add('continuous');
             this.micStatus.textContent = 'Always Listening';
-            this.updateMessage("Great! Now I'm always listening. Say 'start' to begin!");
-            this.speak("Perfect! Now I'm always listening. Say 'start' to begin playing!", () => {
+            this.updateMessage("I'm thinking of a number and you have to guess it! What's the highest number I should pick - say a number like 50 or 100?");
+            this.speak("I'm thinking of a number and you have to guess it! What's the highest number I should pick - say a number like 50 or 100?", () => {
+                this.gameState = 'setup';
                 this.startListening();
             });
         }
@@ -209,20 +211,34 @@ class VoiceGuessGame {
             return;
         }
         
+        if (this.gameState === 'setup') {
+            const maxNumber = this.extractNumber(cleanInput);
+            if (maxNumber && maxNumber >= 10 && maxNumber <= 1000) {
+                this.maxNumber = maxNumber;
+                this.startNewGame();
+            } else {
+                this.speak("Please say a number between 10 and 1000, like 50 or 100!");
+                this.updateMessage("Please say a number between 10 and 1000 for the maximum range!");
+            }
+            return;
+        }
+        
         if (this.gameState === 'playing') {
             const guess = this.extractNumber(cleanInput);
             console.log('Extracted guess:', guess);
-            if (guess !== null) {
+            if (guess !== null && guess >= 1 && guess <= this.maxNumber) {
                 this.processGuess(guess);
             } else {
-                this.speak("Please say a number between 1 and 100! I heard: " + cleanInput);
-                this.updateMessage("I didn't hear a number. I heard: '" + cleanInput + "'. Please say a number between 1 and 100!");
+                this.speak(`Please say a number between 1 and ${this.maxNumber}! I heard: ` + cleanInput);
+                this.updateMessage(`I didn't hear a valid number. I heard: '${cleanInput}'. Please say a number between 1 and ${this.maxNumber}!`);
             }
         }
         
         if (this.gameState === 'won') {
             if (cleanInput.includes('yes') || cleanInput.includes('again') || cleanInput.includes('play')) {
-                this.startNewGame();
+                this.gameState = 'setup';
+                this.speak("Great! What's the highest number I should pick this time?");
+                this.updateMessage("What's the highest number I should pick this time?");
             } else if (cleanInput.includes('no') || cleanInput.includes('stop') || cleanInput.includes('quit')) {
                 this.continuousMode = false;
                 this.micButton.classList.remove('continuous');
@@ -245,22 +261,39 @@ class VoiceGuessGame {
             'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
             'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
             'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70,
-            'eighty': 80, 'ninety': 90, 'hundred': 100
+            'eighty': 80, 'ninety': 90, 'hundred': 100, 'thousand': 1000
         };
         
         // First try to find direct digit matches
         for (let word of words) {
             const num = parseInt(word);
-            if (!isNaN(num) && num >= 1 && num <= 100) {
+            if (!isNaN(num) && num >= 1) {
                 console.log('Found digit:', num);
                 return num;
             }
         }
         
-        // Then try word matches
+        // Handle "one hundred", "two hundred", etc.
+        for (let i = 0; i < words.length - 1; i++) {
+            const word1 = words[i].replace(/[^a-z]/g, '');
+            const word2 = words[i + 1].replace(/[^a-z]/g, '');
+            
+            if (numberWords[word1] && word2 === 'hundred') {
+                const result = numberWords[word1] * 100;
+                console.log('Found hundreds:', word1, 'hundred =', result);
+                return result;
+            }
+            
+            if (word1 === 'one' && word2 === 'thousand') {
+                console.log('Found one thousand');
+                return 1000;
+            }
+        }
+        
+        // Then try single word matches
         for (let word of words) {
             const cleanWord = word.replace(/[^a-z]/g, '');
-            if (numberWords[cleanWord] && numberWords[cleanWord] >= 1 && numberWords[cleanWord] <= 100) {
+            if (numberWords[cleanWord]) {
                 console.log('Found word number:', cleanWord, '=', numberWords[cleanWord]);
                 return numberWords[cleanWord];
             }
@@ -274,10 +307,8 @@ class VoiceGuessGame {
             if (parts[1] && numberWords[parts[1]]) {
                 result += numberWords[parts[1]];
             }
-            if (result >= 1 && result <= 100) {
-                console.log('Found compound number:', result);
-                return result;
-            }
+            console.log('Found compound number:', result);
+            return result;
         }
         
         console.log('No number found in:', input);
@@ -285,18 +316,18 @@ class VoiceGuessGame {
     }
     
     startNewGame() {
-        this.targetNumber = Math.floor(Math.random() * 100) + 1;
+        this.targetNumber = Math.floor(Math.random() * this.maxNumber) + 1;
         this.attempts = 0;
         this.gameState = 'playing';
         this.updateAttempts();
         this.attemptsCounter.classList.remove('hidden');
         this.newGameBtn.classList.add('hidden');
         
-        const message = "Great! I'm thinking of a number between 1 and 100. What's your first guess?";
+        const message = `Great! I'm thinking of a number between 1 and ${this.maxNumber}. What's your first guess?`;
         this.updateMessage(message);
         this.speak(message);
         
-        console.log('Target number:', this.targetNumber); // For testing
+        console.log('Target number:', this.targetNumber, 'Range: 1 to', this.maxNumber); // For testing
     }
     
     processGuess(guess) {
