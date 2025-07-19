@@ -32,7 +32,7 @@ class VoiceGuessGame {
         
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         this.recognition = new SpeechRecognition();
-        this.recognition.continuous = false;
+        this.recognition.continuous = true;
         this.recognition.interimResults = false;
         this.recognition.lang = 'en-US';
         
@@ -71,12 +71,6 @@ class VoiceGuessGame {
         
         utterance.onend = () => {
             if (callback) callback();
-            
-            if (this.continuousMode && (this.gameState === 'playing' || this.gameState === 'won')) {
-                setTimeout(() => {
-                    this.startListening();
-                }, 500);
-            }
         };
         
         this.synthesis.speak(utterance);
@@ -88,8 +82,9 @@ class VoiceGuessGame {
             this.micButton.classList.add('continuous');
             this.micStatus.textContent = 'Always Listening';
             this.updateMessage("Great! Now I'm always listening. Say 'start' to begin!");
-            this.speak("Perfect! Now I'm always listening. Say 'start' to begin playing!");
-            this.startListening();
+            this.speak("Perfect! Now I'm always listening. Say 'start' to begin playing!", () => {
+                this.startListening();
+            });
         }
     }
     
@@ -98,30 +93,15 @@ class VoiceGuessGame {
             return;
         }
         
-        if (this.listeningTimeout) {
-            clearTimeout(this.listeningTimeout);
-        }
-        
         try {
             this.recognition.start();
-            
-            this.listeningTimeout = setTimeout(() => {
-                if (this.isListening) {
-                    this.recognition.stop();
-                    setTimeout(() => {
-                        if (this.continuousMode && (this.gameState === 'playing' || this.gameState === 'won' || this.gameState === 'waiting')) {
-                            this.startListening();
-                        }
-                    }, 100);
-                }
-            }, 10000);
         } catch (error) {
             if (error.name === 'InvalidStateError') {
                 setTimeout(() => {
-                    if (this.continuousMode) {
+                    if (this.continuousMode && !this.isListening) {
                         this.startListening();
                     }
-                }, 100);
+                }, 500);
             } else {
                 this.onSpeechError({ error: 'not-allowed' });
             }
@@ -147,22 +127,39 @@ class VoiceGuessGame {
         
         if (this.continuousMode) {
             this.micStatus.textContent = 'Always Listening';
+            setTimeout(() => {
+                if (this.continuousMode && !this.synthesis.speaking) {
+                    this.startListening();
+                }
+            }, 1000);
         } else {
             this.micStatus.textContent = 'Click to Start Listening';
         }
         
         this.listeningIndicator.classList.add('hidden');
-        
-        if (this.listeningTimeout) {
-            clearTimeout(this.listeningTimeout);
-            this.listeningTimeout = null;
-        }
     }
     
     onSpeechResult(event) {
-        const transcript = event.results[0][0].transcript.toLowerCase().trim();
-        console.log('Heard:', transcript);
-        this.processVoiceInput(transcript);
+        const results = event.results;
+        let transcript = '';
+        
+        for (let i = results.length - 1; i >= 0; i--) {
+            if (results[i].isFinal) {
+                transcript = results[i][0].transcript.toLowerCase().trim();
+                break;
+            }
+        }
+        
+        if (!transcript && results.length > 0) {
+            transcript = results[results.length - 1][0].transcript.toLowerCase().trim();
+        }
+        
+        console.log('Speech result - Raw transcript:', transcript);
+        console.log('Speech result - Game state:', this.gameState);
+        
+        if (transcript) {
+            this.processVoiceInput(transcript);
+        }
     }
     
     onSpeechError(event) {
@@ -200,6 +197,7 @@ class VoiceGuessGame {
     
     processVoiceInput(input) {
         const cleanInput = input.replace(/[^\w\s]/g, '').toLowerCase();
+        console.log('Processing input:', cleanInput, 'in state:', this.gameState);
         
         if (this.gameState === 'waiting') {
             if (cleanInput.includes('start') || cleanInput.includes('begin') || cleanInput.includes('play')) {
@@ -213,11 +211,12 @@ class VoiceGuessGame {
         
         if (this.gameState === 'playing') {
             const guess = this.extractNumber(cleanInput);
+            console.log('Extracted guess:', guess);
             if (guess !== null) {
                 this.processGuess(guess);
             } else {
-                this.speak("Please say a number between 1 and 100!");
-                this.updateMessage("I didn't hear a number. Please say a number between 1 and 100!");
+                this.speak("Please say a number between 1 and 100! I heard: " + cleanInput);
+                this.updateMessage("I didn't hear a number. I heard: '" + cleanInput + "'. Please say a number between 1 and 100!");
             }
         }
         
@@ -237,9 +236,11 @@ class VoiceGuessGame {
     }
     
     extractNumber(input) {
+        console.log('Extracting number from:', input);
+        
         const words = input.split(' ');
         const numberWords = {
-            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
             'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
             'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
             'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
@@ -247,27 +248,39 @@ class VoiceGuessGame {
             'eighty': 80, 'ninety': 90, 'hundred': 100
         };
         
+        // First try to find direct digit matches
         for (let word of words) {
             const num = parseInt(word);
             if (!isNaN(num) && num >= 1 && num <= 100) {
+                console.log('Found digit:', num);
                 return num;
-            }
-            
-            if (numberWords.hasOwnProperty(word)) {
-                return numberWords[word];
             }
         }
         
+        // Then try word matches
+        for (let word of words) {
+            const cleanWord = word.replace(/[^a-z]/g, '');
+            if (numberWords[cleanWord] && numberWords[cleanWord] >= 1 && numberWords[cleanWord] <= 100) {
+                console.log('Found word number:', cleanWord, '=', numberWords[cleanWord]);
+                return numberWords[cleanWord];
+            }
+        }
+        
+        // Handle compound numbers like "twenty one", "thirty five", etc.
         const twentyToNinetyNine = input.match(/(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[\s-]?(?:one|two|three|four|five|six|seven|eight|nine)?/);
         if (twentyToNinetyNine) {
             const parts = twentyToNinetyNine[0].split(/[\s-]/);
             let result = numberWords[parts[0]] || 0;
-            if (parts[1]) {
-                result += numberWords[parts[1]] || 0;
+            if (parts[1] && numberWords[parts[1]]) {
+                result += numberWords[parts[1]];
             }
-            return result;
+            if (result >= 1 && result <= 100) {
+                console.log('Found compound number:', result);
+                return result;
+            }
         }
         
+        console.log('No number found in:', input);
         return null;
     }
     
