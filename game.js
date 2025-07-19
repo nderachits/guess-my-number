@@ -7,6 +7,7 @@ class VoiceGuessGame {
         this.continuousMode = false;
         this.listeningTimeout = null;
         this.maxNumber = 100;
+        this.isSpeaking = false;
         
         this.initializeElements();
         this.initializeSpeech();
@@ -25,7 +26,7 @@ class VoiceGuessGame {
         this.newGameBtn = document.getElementById('new-game-btn');
     }
     
-    initializeSpeech() {
+    async initializeSpeech() {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             this.showError("Sorry, your browser doesn't support speech recognition. Please use Chrome, Safari, or Edge.");
             return;
@@ -45,12 +46,60 @@ class VoiceGuessGame {
         this.synthesis = window.speechSynthesis;
     }
     
+    getOptimizedMicrophoneConstraints() {
+        const isChrome = navigator.userAgent.includes('Chrome');
+        const isFirefox = navigator.userAgent.includes('Firefox');
+        const isSafari = navigator.userAgent.includes('Safari') && !isChrome;
+        
+        let constraints = {
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        };
+        
+        // Chrome-specific optimizations
+        if (isChrome) {
+            constraints.audio.googEchoCancellation = true;
+            constraints.audio.googAutoGainControl = true;
+            constraints.audio.googNoiseSuppression = true;
+            constraints.audio.googHighpassFilter = true;
+            constraints.audio.googEchoCancellationType = 'browser';
+        }
+        
+        // Firefox has aggressive noise suppression by default
+        if (isFirefox) {
+            // Keep noise suppression enabled for Firefox as it works well
+            constraints.audio.noiseSuppression = true;
+        }
+        
+        return constraints;
+    }
+    
+    updateSpeakingVisuals(isSpeaking) {
+        if (isSpeaking) {
+            this.micButton.classList.add('speaking');
+            this.micButton.classList.remove('listening');
+            this.micStatus.textContent = 'Speaking...';
+        } else {
+            this.micButton.classList.remove('speaking');
+            if (this.continuousMode) {
+                this.micStatus.textContent = 'Always Listening';
+            }
+        }
+    }
+    
     setupEventListeners() {
         this.micButton.addEventListener('click', () => this.toggleListening());
         this.newGameBtn.addEventListener('click', () => this.startNewGame());
     }
     
     speak(text, callback = null) {
+        // Set speaking state to filter out speech results (but keep recognition running)
+        this.isSpeaking = true;
+        this.updateSpeakingVisuals(true);
+        
         if (this.synthesis.speaking) {
             this.synthesis.cancel();
         }
@@ -71,7 +120,16 @@ class VoiceGuessGame {
         }
         
         utterance.onend = () => {
+            this.isSpeaking = false;
+            this.updateSpeakingVisuals(false);
             if (callback) callback();
+            // Recognition keeps running - no need to restart
+        };
+        
+        utterance.onerror = () => {
+            this.isSpeaking = false;
+            this.updateSpeakingVisuals(false);
+            // Recognition keeps running - no need to restart
         };
         
         this.synthesis.speak(utterance);
@@ -91,7 +149,8 @@ class VoiceGuessGame {
     }
     
     startListening() {
-        if (!this.recognition || this.isListening) {
+        // Don't start listening if we're speaking or already listening
+        if (!this.recognition || this.isListening || this.isSpeaking) {
             return;
         }
         
@@ -100,7 +159,7 @@ class VoiceGuessGame {
         } catch (error) {
             if (error.name === 'InvalidStateError') {
                 setTimeout(() => {
-                    if (this.continuousMode && !this.isListening) {
+                    if (this.continuousMode && !this.isListening && !this.isSpeaking) {
                         this.startListening();
                     }
                 }, 500);
@@ -128,12 +187,17 @@ class VoiceGuessGame {
         this.micButton.classList.remove('listening');
         
         if (this.continuousMode) {
-            this.micStatus.textContent = 'Always Listening';
-            setTimeout(() => {
-                if (this.continuousMode && !this.synthesis.speaking) {
-                    this.startListening();
-                }
-            }, 1000);
+            if (this.isSpeaking) {
+                this.micStatus.textContent = 'Speaking...';
+            } else {
+                this.micStatus.textContent = 'Always Listening';
+                // Auto-restart recognition if it stops unexpectedly (browser timeout, etc.)
+                setTimeout(() => {
+                    if (this.continuousMode && !this.isSpeaking && !this.isListening) {
+                        this.startListening();
+                    }
+                }, 100); // Quick restart to maintain continuity
+            }
         } else {
             this.micStatus.textContent = 'Click to Start Listening';
         }
@@ -158,8 +222,14 @@ class VoiceGuessGame {
         
         console.log('Speech result - Raw transcript:', transcript);
         console.log('Speech result - Game state:', this.gameState);
+        console.log('Speech result - isSpeaking:', this.isSpeaking);
         
-        if (transcript) {
+        // Ignore speech results if we're currently speaking (feedback prevention)
+        if (this.isSpeaking) {
+            console.log('Ignoring speech result - app is speaking');
+            return;
+        }
+        if (transcript && !this.isSpeaking) {
             this.processVoiceInput(transcript);
         }
     }
