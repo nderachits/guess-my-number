@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess My Number - Voice Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Guess My Number! 🎯</h1>
+            <p class="subtitle">I'm thinking of a number between 1 and 100!</p>
+        </header>
+
+        <main>
+            <div class="game-area">
+                <div class="status-display">
+                    <div id="game-message" class="message">
+                        Click the microphone once to start continuous listening, then say "Start" to begin!
+                    </div>
+                    <div id="attempts-counter" class="attempts hidden">
+                        Attempts: <span id="attempts-count">0</span>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="mic-button" class="mic-button" aria-label="Press to activate continuous listening">
+                        <div class="mic-icon">🎤</div>
+                        <div class="mic-status" id="mic-status">Click to Start Listening</div>
+                    </button>
+                </div>
+
+                <div class="visual-feedback">
+                    <div id="listening-indicator" class="listening-indicator hidden">
+                        <div class="pulse"></div>
+                        <div class="text">Listening...</div>
+                    </div>
+                </div>
+
+                <div class="game-controls">
+                    <button id="new-game-btn" class="action-button hidden">
+                        🎮 New Game
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <div class="instructions">
+            <h3>How to Play:</h3>
+            <ul>
+                <li>🎤 Click the microphone once to enable continuous listening</li>
+                <li>🗣️ Say "Start" to begin playing</li>
+                <li>🔢 I'll think of a number between 1 and 100</li>
+                <li>🎯 Just speak your guesses - no more button clicking!</li>
+                <li>🏆 Try to guess in as few attempts as possible!</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
